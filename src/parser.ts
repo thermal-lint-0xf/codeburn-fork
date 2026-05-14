@@ -5,6 +5,7 @@ import { calculateCost, getShortModelName } from './models.js'
 import { discoverAllSessions, getProvider } from './providers/index.js'
 import { flushCodexCache } from './codex-cache.js'
 import { flushAntigravityCache } from './providers/antigravity.js'
+import { isSqliteBusyError } from './sqlite.js'
 import type { ParsedProviderCall } from './providers/types.js'
 import type {
   AssistantMessageContent,
@@ -565,6 +566,19 @@ function providerCallToTurn(call: ParsedProviderCall): ParsedTurn {
   }
 }
 
+const warnedProviderReadFailures = new Set<string>()
+
+function warnProviderReadFailureOnce(providerName: string, err: unknown): void {
+  const key = `${providerName}:sqlite-busy`
+  if (warnedProviderReadFailures.has(key)) return
+  warnedProviderReadFailures.add(key)
+  if (isSqliteBusyError(err)) {
+    process.stderr.write(
+      `codeburn: skipped ${providerName} data because its SQLite database is temporarily locked; will retry on the next refresh.\n`
+    )
+  }
+}
+
 async function parseProviderSources(
   providerName: string,
   sources: Array<{ path: string; project: string }>,
@@ -589,25 +603,33 @@ async function parseProviderSources(
         seenKeys,
       )
 
-      for await (const call of parser.parse()) {
-        if (dateRange) {
-          if (!call.timestamp) continue
-          const ts = new Date(call.timestamp)
-          if (ts < dateRange.start || ts > dateRange.end) continue
-        }
+      try {
+        for await (const call of parser.parse()) {
+          if (dateRange) {
+            if (!call.timestamp) continue
+            const ts = new Date(call.timestamp)
+            if (ts < dateRange.start || ts > dateRange.end) continue
+          }
 
-        const turn = providerCallToTurn(call)
-        const classified = classifyTurn(turn)
-        const project = call.project ?? source.project
-        const key = `${providerName}:${call.sessionId}:${project}`
+          const turn = providerCallToTurn(call)
+          const classified = classifyTurn(turn)
+          const project = call.project ?? source.project
+          const key = `${providerName}:${call.sessionId}:${project}`
 
-        const existing = sessionMap.get(key)
-        if (existing) {
-          existing.turns.push(classified)
-          if (!existing.projectPath && call.projectPath) existing.projectPath = call.projectPath
-        } else {
-          sessionMap.set(key, { project, projectPath: call.projectPath, turns: [classified] })
+          const existing = sessionMap.get(key)
+          if (existing) {
+            existing.turns.push(classified)
+            if (!existing.projectPath && call.projectPath) existing.projectPath = call.projectPath
+          } else {
+            sessionMap.set(key, { project, projectPath: call.projectPath, turns: [classified] })
+          }
         }
+      } catch (err) {
+        if (isSqliteBusyError(err)) {
+          warnProviderReadFailureOnce(providerName, err)
+          continue
+        }
+        throw err
       }
     }
   } finally {

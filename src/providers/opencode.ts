@@ -4,7 +4,7 @@ import { homedir } from 'os'
 
 import { calculateCost, getShortModelName } from '../models.js'
 import { extractBashCommands } from '../bash-utils.js'
-import { isSqliteAvailable, getSqliteLoadError, openDatabase, blobToText, type SqliteDatabase } from '../sqlite.js'
+import { isSqliteAvailable, getSqliteLoadError, openDatabase, blobToText, isSqliteBusyError, type SqliteDatabase } from '../sqlite.js'
 import type {
   Provider,
   SessionSource,
@@ -126,7 +126,8 @@ function validateSchemaDetailed(db: SqliteDatabase): SchemaCheckResult {
   for (const table of required) {
     try {
       db.query<{ cnt: number }>(`SELECT COUNT(*) as cnt FROM ${table} LIMIT 1`)
-    } catch {
+    } catch (err) {
+      if (isSqliteBusyError(err)) throw err
       missing.push(table)
     }
   }
