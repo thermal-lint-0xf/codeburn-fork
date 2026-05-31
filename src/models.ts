@@ -478,7 +478,10 @@ export function getShortModelName(model: string): string {
   const claude = deriveClaudeShortName(canonical)
   if (claude) return claude
   for (const [key, name] of SORTED_SHORT_NAMES) {
-    if (canonical.startsWith(key)) return name
+    // Match on a version boundary, not a bare prefix: an unlisted future minor
+    // (e.g. gpt-5.6) must NOT collapse into the base "gpt-5" entry — it should
+    // fall through to its raw id rather than show a wrong name/tier.
+    if (canonical === key || canonical.startsWith(key + '-')) return name
   }
   return canonical
 }
