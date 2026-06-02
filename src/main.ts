@@ -963,6 +963,8 @@ program
   .description('Run a Model Context Protocol server (stdio) exposing usage + savings to AI agents')
   .action(async () => {
     // stdout MUST carry only JSON-RPC; route stray logs to stderr.
+    // NOTE: only console.log is guarded here. process.stdout.write is left intact
+    // because the MCP StdioServerTransport relies on it for JSON-RPC output.
     console.log = ((...args: unknown[]) => process.stderr.write(args.join(' ') + '\n')) as typeof console.log
     const { startStdioServer } = await import('./mcp/server.js')
     await startStdioServer(version)

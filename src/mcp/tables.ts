@@ -6,7 +6,7 @@ export type BreakdownBy = 'project' | 'model' | 'task' | 'provider'
 function mdTable(headers: string[], rows: string[][]): string {
   const head = `| ${headers.join(' | ')} |`
   const sep = `| ${headers.map(() => '---').join(' | ')} |`
-  if (rows.length === 0) return `${head}\n${sep}\n| _(no data)_ |${' |'.repeat(headers.length - 1)}`
+  if (rows.length === 0) return `${head}\n${sep}\n| _(no data)_ ${' | '.repeat(headers.length - 1)}|`
   return [head, sep, ...rows.map(r => `| ${r.join(' | ')} |`)].join('\n')
 }
 

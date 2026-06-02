@@ -4,7 +4,8 @@ import type { MenubarPayload } from '../src/menubar-json.js'
 
 function payload(): MenubarPayload {
   const base = {
-    name: 'secret-client-repo', cost: 5, sessions: 2, avgCostPerSession: 2.5, sessionDetails: [],
+    name: 'secret-client-repo', cost: 5, sessions: 2, avgCostPerSession: 2.5,
+    sessionDetails: [{ cost: 3, calls: 5, inputTokens: 100, outputTokens: 50, date: '2026-06-01', models: [{ name: 'Opus', cost: 3 }] }],
   }
   return {
     generated: '', optimize: { findingCount: 0, savingsUSD: 0, topFindings: [] }, history: { daily: [] },
@@ -32,8 +33,21 @@ describe('redact', () => {
     expect(out.current.topSessions[0]!.project).toMatch(/^project-[0-9a-f]{6}$/)
     expect(out.current.topProjects[0]!.cost).toBe(5)
   })
-  it('keeps real names when include=true', () => {
+  it('redacts session details when hashing', () => {
+    const out = redactProjectNames(payload(), false)
+    const details = out.current.topProjects[0]!.sessionDetails!
+    expect(details).toHaveLength(1)
+    expect(details[0]!.date).toBe('')
+    expect(details[0]!.models).toEqual([])
+    expect(details[0]!.cost).toBe(3)
+  })
+  it('same project name gets same pseudonym in topProjects and topSessions', () => {
+    const out = redactProjectNames(payload(), false)
+    expect(out.current.topProjects[0]!.name).toBe(out.current.topSessions[0]!.project)
+  })
+  it('keeps real names and session details when include=true', () => {
     const out = redactProjectNames(payload(), true)
     expect(out.current.topProjects[0]!.name).toBe('secret-client-repo')
+    expect(out.current.topProjects[0]!.sessionDetails![0]!.date).toBe('2026-06-01')
   })
 })

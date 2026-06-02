@@ -83,7 +83,11 @@ export function createServer(deps: { version: string; aggregate?: Aggregate }): 
           structuredContent: { period: c.label, empty: false, totals, breakdown },
         }
       } catch (err) {
-        return { content: [{ type: 'text' as const, text: `codeburn: failed to read usage — ${err instanceof Error ? err.message : String(err)}` }], isError: true }
+        return {
+          content: [{ type: 'text' as const, text: `codeburn: failed to read usage — ${err instanceof Error ? err.message : String(err)}` }],
+          structuredContent: { period: 'unknown', empty: true, totals: { costUSD: 0, calls: 0, sessions: 0, cacheHitPercent: 0, oneShotRate: null }, breakdown: null },
+          isError: true,
+        }
       }
     },
   )
@@ -113,7 +117,11 @@ export function createServer(deps: { version: string; aggregate?: Aggregate }): 
           structuredContent: { period: c.label, optimize: payload.optimize, retryTaxUSD: c.retryTax.totalUSD, routingWasteUSD: c.routingWaste.totalSavingsUSD },
         }
       } catch (err) {
-        return { content: [{ type: 'text' as const, text: `codeburn: failed to compute savings — ${err instanceof Error ? err.message : String(err)}` }], isError: true }
+        return {
+          content: [{ type: 'text' as const, text: `codeburn: failed to compute savings — ${err instanceof Error ? err.message : String(err)}` }],
+          structuredContent: { period: 'unknown', optimize: { findingCount: 0, savingsUSD: 0, topFindings: [] }, retryTaxUSD: 0, routingWasteUSD: 0 },
+          isError: true,
+        }
       }
     },
   )
@@ -124,7 +132,5 @@ export function createServer(deps: { version: string; aggregate?: Aggregate }): 
 export async function startStdioServer(version: string): Promise<void> {
   await loadPricing()
   const server = createServer({ version })
-  // Pre-warm the parser cache for the common case; ignore failures.
-  void buildMenubarPayloadForRange(getDateRange('today'), { provider: 'all', optimize: false }).catch(() => {})
   await server.connect(new StdioServerTransport())
 }
