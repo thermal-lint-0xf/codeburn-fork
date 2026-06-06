@@ -261,11 +261,13 @@ const DROP_COLUMN_GROUPS: Array<Array<Column['key']>> = [
   ['saved'],
 ]
 
-function defaultColumns(byTask: boolean): Column[] {
+function defaultColumns(byTask: boolean, showSaved: boolean): Column[] {
   // Higher priority numbers drop FIRST when the terminal is narrow.
   // Cache columns are the cheapest to lose, then input/output, then top-task.
-  // Provider/Model/Total/Cost/Saved stay regardless — Saved is the headline
-  // of issue #421 and should survive almost every narrow-terminal cut.
+  // Provider/Model/Total/Cost stay regardless. The Saved column only appears
+  // when local-model savings actually exist (a `codeburn model-savings`
+  // mapping produced nonzero avoided spend); otherwise it would be a column of
+  // dashes for the majority of users, so it is omitted entirely.
   // Widths are MINIMUMS; sizeColumnsToContent() expands them to fit cell text.
   return [
     { key: 'provider',   header: 'Provider',                   align: 'left',  width: 8,  priority: 0 },
@@ -277,7 +279,7 @@ function defaultColumns(byTask: boolean): Column[] {
     { key: 'cacheRead',  header: 'Cache Read',                 align: 'right', width: 10, priority: 3 },
     { key: 'total',      header: 'Total',                      align: 'right', width: 6,  priority: 0 },
     { key: 'cost',       header: 'Cost',                       align: 'right', width: 6,  priority: 0 },
-    { key: 'saved',      header: 'Saved',                      align: 'right', width: 6,  priority: 0 },
+    ...(showSaved ? [{ key: 'saved' as const, header: 'Saved', align: 'right' as const, width: 6, priority: 0 }] : []),
   ]
 }
 
@@ -302,8 +304,8 @@ function frameWidth(columns: Column[]): number {
   return 2 + columns.reduce((acc, c) => acc + c.width + 2, 0) + (columns.length - 1)
 }
 
-function chooseColumns(byTask: boolean, available: number): Column[] {
-  const all = defaultColumns(byTask)
+function chooseColumns(byTask: boolean, available: number, showSaved: boolean): Column[] {
+  const all = defaultColumns(byTask, showSaved)
   if (frameWidth(all) <= available) return all
 
   // Drop in this order so the table degrades sensibly. Cache columns drop as
@@ -404,6 +406,8 @@ export function renderTable(
   const showTotals = opts.showTotals ?? true
   const available = opts.terminalWidth ?? defaultTerminalWidth()
   const fullWidth = opts.fullWidth ?? true
+  // Only render the Saved column when something was actually saved.
+  const showSaved = rows.some(r => r.savingsUSD > 0)
 
   const valueOf = (row: ModelReportRow, key: Column['key'], isNewGroup: boolean): string => {
     switch (key) {
@@ -432,7 +436,7 @@ export function renderTable(
     const groupKey = `${row.provider} ${row.model}`
     const isNewGroup = !byTask || groupKey !== prevProviderModel
     prevProviderModel = groupKey
-    const allCells = defaultColumns(byTask).map(col => {
+    const allCells = defaultColumns(byTask, showSaved).map(col => {
       const raw = valueOf(row, col.key, isNewGroup)
       if (col.key === 'provider' && raw) return chalk.dim(raw)
       return raw
@@ -455,7 +459,7 @@ export function renderTable(
       },
       { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, total: 0, cost: 0, savings: 0 },
     )
-    const cells = defaultColumns(byTask).map(col => {
+    const cells = defaultColumns(byTask, showSaved).map(col => {
       switch (col.key) {
         case 'provider':   return ''
         case 'model':      return chalk.yellow.bold('Total')
@@ -475,9 +479,9 @@ export function renderTable(
   // Pick which columns to include based on terminal width, then size them.
   // We index into `cells` by the column key to avoid object-identity pitfalls
   // across defaultColumns() invocations.
-  const allKeys = defaultColumns(byTask).map(c => c.key)
+  const allKeys = defaultColumns(byTask, showSaved).map(c => c.key)
   const indexByKey = new Map(allKeys.map((k, i) => [k, i]))
-  const columns = chooseColumns(byTask, available)
+  const columns = chooseColumns(byTask, available, showSaved)
   const projectColumns = (cols: Column[], entry: RowCells) =>
     cols.map(c => entry.cells[indexByKey.get(c.key)!] ?? '')
   const cellMatrix = [
